@@ -24,4 +24,5 @@ test-output
 *.ipr
 *.iws
 .idea/*
+*/.idea/*
 

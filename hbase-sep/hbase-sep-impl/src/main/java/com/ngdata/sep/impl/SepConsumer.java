@@ -123,11 +123,14 @@ public class SepConsumer extends BaseHRegionServer {
         this.payloadExtractor = payloadExtractor;
         this.executors = Lists.newArrayListWithCapacity(threadCnt);
 
+        // Binding the SEP Consumer to a socket
         InetSocketAddress initialIsa = new InetSocketAddress(hostName, 0);
         if (initialIsa.getAddress() == null) {
             throw new IllegalArgumentException("Failed resolve of " + initialIsa);
         }
         String name = "regionserver/" + initialIsa.toString();
+
+        // Construct new RPC server to expose the service
         this.rpcServer = new RpcServer(this, name, getServices(),
         /*HBaseRPCErrorHandler.class, OnlineRegions.class},*/
                 initialIsa, // BindAddress is IP we got for this server.
@@ -149,13 +152,14 @@ public class SepConsumer extends BaseHRegionServer {
         this.zkWatcher = new ZooKeeperWatcher(hbaseConf, this.serverName.toString(), null);
 
         // login the zookeeper client principal (if using security)
-        ZKUtil.loginClient(hbaseConf, "hbase.zookeeper.client.keytab.file",
-                "hbase.zookeeper.client.kerberos.principal", hostName);
+//        ZKUtil.loginClient(hbaseConf, "hbase.zookeeper.client.keytab.file",
+//                "hbase.zookeeper.client.kerberos.principal", hostName);
 
         // login the server principal (if using secure Hadoop)
-        User.login(hbaseConf, "hbase.regionserver.keytab.file",
-                "hbase.regionserver.kerberos.principal", hostName);
+//        User.login(hbaseConf, "hbase.regionserver.keytab.file",
+//                "hbase.regionserver.kerberos.principal", hostName);
 
+        // Creating multiple executors
         for (int i = 0; i < threadCnt; i++) {
             ThreadPoolExecutor executor = new ThreadPoolExecutor(1, 1, 10, TimeUnit.SECONDS,
                     new ArrayBlockingQueue<Runnable>(100));
@@ -164,6 +168,9 @@ public class SepConsumer extends BaseHRegionServer {
         }
     }
 
+    /*
+     * Publish the service on Zookeeper for the Master replication cluster to use
+     */
     public void start() throws IOException, InterruptedException, KeeperException {
 
         rpcServer.start();
@@ -184,6 +191,9 @@ public class SepConsumer extends BaseHRegionServer {
         return bssi;
     }
 
+    /*
+     * Stop the service and remove the ZNode from Zookeeper.
+     */
     public void stop() {
         Closer.close(zkWatcher);
         if (running) {
@@ -210,6 +220,9 @@ public class SepConsumer extends BaseHRegionServer {
         return running;
     }
 
+    /*
+     * Service exposed for replicating the WALEntries
+     */
     @Override
     public AdminProtos.ReplicateWALEntryResponse replicateWALEntry(final RpcController controller,
             final AdminProtos.ReplicateWALEntryRequest request) throws ServiceException {

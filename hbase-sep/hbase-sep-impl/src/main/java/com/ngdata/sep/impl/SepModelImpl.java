@@ -169,7 +169,10 @@ public class SepModelImpl implements SepModel {
             Closer.close(replicationAdmin);
         }
     }
-    
+
+    /*
+     *
+     */
     static String toInternalSubscriptionName(String subscriptionName) {
         if (subscriptionName.indexOf(INTERNAL_HYPHEN_REPLACEMENT, 0) != -1) {
             throw new IllegalArgumentException("Subscription name cannot contain character \\U1400");

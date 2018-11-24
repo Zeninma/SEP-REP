@@ -22,6 +22,7 @@ import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
+import org.apache.hadoop.hbase.client.replication.ReplicationAdmin;
 
 import java.io.IOException;
 
@@ -33,15 +34,21 @@ public class DemoSchema {
 
     public static void createSchema(Configuration hbaseConf) throws IOException {
         Admin admin = ConnectionFactory.createConnection(hbaseConf).getAdmin();
-        if (!admin.tableExists(TableName.valueOf("sep-user-demo"))) {
-            HTableDescriptor tableDescriptor = new HTableDescriptor(TableName.valueOf("sep-user-demo"));
-
-            HColumnDescriptor infoCf = new HColumnDescriptor("info");
-            infoCf.setScope(1);
-            tableDescriptor.addFamily(infoCf);
-
-            admin.createTable(tableDescriptor);
+        TableName tableName = TableName.valueOf("sep-user-demo");
+        if(admin.tableExists(tableName)){
+            if(admin.isTableEnabled(tableName)){
+                admin.disableTable(tableName);
+            }
+            admin.deleteTable(tableName);
+            assert(admin.tableExists(tableName));
         }
+
+        HTableDescriptor tableDescriptor = new HTableDescriptor(tableName);
+
+        HColumnDescriptor infoCf = new HColumnDescriptor("info");
+        infoCf.setScope(1);
+        tableDescriptor.addFamily(infoCf);
+        admin.createTable(tableDescriptor);
         admin.close();
     }
 }

@@ -36,10 +36,14 @@ import org.apache.hadoop.hbase.util.Bytes;
  */
 public class LoggingConsumer {
     public static void main(String[] args) throws Exception {
+        // Create a configuratin and set replication to true
         Configuration conf = HBaseConfiguration.create();
         conf.setBoolean("hbase.replication", true);
 
+        // Create the zoo keeper connection
         ZooKeeperItf zk = ZkUtil.connect("localhost", 20000);
+
+        // Create SepModelImpl and set up the zk nodes
         SepModel sepModel = new SepModelImpl(zk, conf);
 
         final String subscriptionName = "logger";
@@ -48,12 +52,15 @@ public class LoggingConsumer {
             sepModel.addSubscriptionSilent(subscriptionName);
         }
 
+        // Create filter
         PayloadExtractor payloadExtractor = new BasePayloadExtractor(Bytes.toBytes("sep-user-demo"), Bytes.toBytes("info"),
                 Bytes.toBytes("payload"));
 
+        // Create consumer that simulates a Region Server and receives replicated WALEdit
         SepConsumer sepConsumer = new SepConsumer(subscriptionName, 0, new EventLogger(), 1, "localhost", zk, conf,
                 payloadExtractor);
 
+        // Expose the fake HBase RegionServer on Zookeeper.
         sepConsumer.start();
         System.out.println("Started");
 
