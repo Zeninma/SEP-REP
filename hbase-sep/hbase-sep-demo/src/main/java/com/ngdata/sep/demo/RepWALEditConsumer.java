@@ -47,8 +47,11 @@ public class RepWALEditConsumer {
         Configuration conf = HBaseConfiguration.create();
         conf.setBoolean("hbase.replication", true);
 
+        // try to get the 
+        String connectString = conf.get("hbase.zookeeper.quorum", "localhost");
+
         // Create the zoo keeper connection
-        ZooKeeperItf zk = ZkUtil.connect("localhost", 20000);
+        ZooKeeperItf zk = ZkUtil.connect(connectString, 20000);
 
         // Create SepModelImpl and set up the zk nodes
         SepModel sepModel = new SepModelImpl(zk, conf);
@@ -56,10 +59,12 @@ public class RepWALEditConsumer {
 
         final String subscriptionName = "replication";
 
+        // set the value for the zk node that is going to be exposed
         if (!sepModel.hasSubscription(subscriptionName)) {
             sepModel.addSubscriptionSilent(subscriptionName);
         }
 
+        // try to create region LSN table, if not already exists
         createRegionLSNTable(conf);
 
         // Create consumer that simulates a Region Server and receives replicated WALEdit
@@ -67,6 +72,7 @@ public class RepWALEditConsumer {
                 regionLSNCFName, regionLSNRowName, subscriptionName, 0,
                 "localhost", zk, conf, true);
 
+        // start the new consumer by exposing the zk node in zookeeper
         repConsumer.start();
         System.out.println("Started");
 

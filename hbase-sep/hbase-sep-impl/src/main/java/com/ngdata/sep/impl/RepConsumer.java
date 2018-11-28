@@ -157,7 +157,8 @@ public class RepConsumer extends BaseHRegionServer {
 
         rpcServer.start();
 
-        // Publish our existence in ZooKeeper
+        // Publish our existence in ZooKeeper under the name
+        // /ngdata/sep/hbase-slave/subscriptionId/rs/
         zkNodePath = hbaseConf.get(SepModel.ZK_ROOT_NODE_CONF_KEY, SepModel.DEFAULT_ZK_ROOT_NODE)
                 + "/" + subscriptionId + "/rs/" + serverName.getServerName();
         zk.create(zkNodePath, null, ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.EPHEMERAL);
@@ -248,8 +249,8 @@ public class RepConsumer extends BaseHRegionServer {
                         m = CellUtil.isDelete(cell)?
                                 new Delete(cell.getRowArray(), cell.getRowOffset(), cell.getRowLength()):
                                 new Put(cell.getRowArray(), cell.getRowOffset(), cell.getRowLength());
-                        List<UUID> clusterIds = new ArrayList<UUID>();
-                        m.setClusterIds(clusterIds);
+//                        List<UUID> clusterIds = new ArrayList<UUID>();
+//                        m.setClusterIds(clusterIds);
                         addToRowMap(rowMap, table, m);
                     }
                     if (CellUtil.isDelete(cell)) {
