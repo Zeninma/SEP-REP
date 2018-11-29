@@ -280,7 +280,7 @@ public class RepConsumer extends BaseHRegionServer {
                 updateRegionLSNPut.addColumn(regionLSNCFName, regionCol,
                         Bytes.toBytes(regionLSNMapEntry.getValue()));
             }
-            // Apply the update
+            // Apply the update of a single row to regionLSNTableName
             applyPut(regionLSNTableName, updateRegionLSNPut);
 
 //            int size = entries.size();

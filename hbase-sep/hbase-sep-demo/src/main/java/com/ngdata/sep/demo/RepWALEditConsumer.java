@@ -37,8 +37,11 @@ import org.apache.hadoop.hbase.util.Bytes;
  * 2. replicate the edits
  */
 public class RepWALEditConsumer {
+    // Table at Slave cluster, storing the largest LSN that have been applied to each
+    // region on the Master Cluster
     final private static TableName regionLSNTableName = TableName.valueOf("regionLSNTable");
     final private static byte[] regionLSNCFName = Bytes.toBytes("regionLSNCFName");
+    // there is only one row in regionLSNTableName
     final private static byte[] regionLSNRowName = Bytes.toBytes("regionLSNRowName");
 
 
@@ -47,10 +50,8 @@ public class RepWALEditConsumer {
         Configuration conf = HBaseConfiguration.create();
         conf.setBoolean("hbase.replication", true);
 
-        // try to get the 
+        // get the hbase zookeeper quorum's ip and create the zoo keeper connection
         String connectString = conf.get("hbase.zookeeper.quorum", "localhost");
-
-        // Create the zoo keeper connection
         ZooKeeperItf zk = ZkUtil.connect(connectString, 20000);
 
         // Create SepModelImpl and set up the zk nodes
@@ -63,7 +64,6 @@ public class RepWALEditConsumer {
         if (!sepModel.hasSubscription(subscriptionName)) {
             sepModel.addSubscriptionSilent(subscriptionName);
         }
-
         // try to create region LSN table, if not already exists
         createRegionLSNTable(conf);
 
