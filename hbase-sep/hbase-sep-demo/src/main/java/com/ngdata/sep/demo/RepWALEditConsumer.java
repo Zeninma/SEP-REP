@@ -16,6 +16,7 @@
 package com.ngdata.sep.demo;
 
 import java.io.IOException;
+import java.net.InetAddress;
 import java.util.List;
 
 import com.ngdata.sep.EventListener;
@@ -46,6 +47,7 @@ public class RepWALEditConsumer {
 
 
     public static void main(String[] args) throws Exception {
+        System.out.println("This is the second version");
         // Create a configuratin and set replication to true
         Configuration conf = HBaseConfiguration.create();
         conf.setBoolean("hbase.replication", true);
@@ -67,14 +69,16 @@ public class RepWALEditConsumer {
         // try to create region LSN table, if not already exists
         createRegionLSNTable(conf);
 
+        String hostName = InetAddress.getLocalHost().getHostName();
+        System.out.printf("using hostname %s\n", hostName);
         // Create consumer that simulates a Region Server and receives replicated WALEdit
         RepConsumer repConsumer = new RepConsumer(regionLSNTableName,
                 regionLSNCFName, regionLSNRowName, subscriptionName, 0,
-                "localhost", zk, conf, true);
+                hostName, zk, conf, false);
 
         // start the new consumer by exposing the zk node in zookeeper
         repConsumer.start();
-        System.out.println("Started");
+        System.out.println("Started waiting");
 
         while (true) {
             Thread.sleep(Long.MAX_VALUE);

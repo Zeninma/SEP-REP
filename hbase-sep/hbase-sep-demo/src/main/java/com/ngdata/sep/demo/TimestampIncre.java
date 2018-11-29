@@ -1,3 +1,19 @@
+/*
+ * Copyright 2012 NGDATA nv
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package com.ngdata.sep.demo;
 
 import org.apache.hadoop.conf.Configuration;
@@ -35,69 +51,94 @@ public class TimestampIncre {
 
 
     public static void main(String[] args) throws Exception {
-        // make connection to the local cluster's HBase
-        Configuration conf = HBaseConfiguration.create();
-        Connection conn = ConnectionFactory.createConnection(conf);
-        Admin admin = conn.getAdmin();
-        // check if both table regionLSNTable and masterLSNTS exit
-        while(!admin.tableExists(masterLSNTS) || !admin.tableExists(regionLSNTableName)) {
-            // sleep for 1 seconds and retry.
-            try {
-                Thread.sleep(1000);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                throw new RuntimeException(e);
-            }
-        }
-
-        Long currTs = null;
-        Long nextTs = null;
-        Boolean increTs = false;
-        Map<String, Long> lsnTsMap = new HashMap<String, Long>();
-        nextTs = fillMap(conn, lsnTsMap);
-
-        while(true){
-            if(increTs){
-                // bumps up the current Timestamp and reset lsnTsMap
-                currTs = nextTs;
-                lsnTsMap.clear();
-                nextTs = fillMap(conn, lsnTsMap);
-            }
-
-            increTs = true;
-
-            Table regionLSNTable = conn.getTable(regionLSNTableName);
-            Get getRegionLSN = new Get(regionLSNRowName);
-            Result regionLSNRow = regionLSNTable.get(getRegionLSN);
-            CellScanner regionLSNScanner = regionLSNRow.cellScanner();
-            int regionCount = 0;
-            while (regionLSNScanner.advance()){
-                Cell cell = regionLSNScanner.current();
-                String region = Bytes.toString(cell.getQualifierArray());
-                Long seqNum = Bytes.toLong(cell.getValueArray());
-                if(!lsnTsMap.containsKey(region)){
-                    // this case should not happen, it means that
-                    // a region's LSN has been written but the actual data
-                    // has not been replicated yet
-                    increTs = false;
-                    break;
+        Connection conn = null;
+        try {
+            // make connection to the local cluster's HBase
+            Configuration conf = HBaseConfiguration.create();
+            conn = ConnectionFactory.createConnection(conf);
+            Admin admin = conn.getAdmin();
+            // check if both table regionLSNTable and masterLSNTS exit
+            System.out.println("started TimestampIncre");
+            while (!(admin.tableExists(masterLSNTS) && admin.tableExists(regionLSNTableName))) {
+                // sleep for 1 seconds and retry.
+                try {
+                    Thread.sleep(5000);
+                    System.out.println("waiting for table to be created");
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new RuntimeException(e);
                 }
-                else{
-                    Long targetSeqNum = lsnTsMap.get(region);
-                    if(targetSeqNum >= seqNum){
+            }
+            admin.close();
+
+            System.out.println("the two tables come online");
+
+            Long currTs = null;
+            Long nextTs = null;
+            Boolean increTs = false;
+            Map<String, Long> lsnTsMap = new HashMap<String, Long>();
+            nextTs = fillMap(conn, lsnTsMap);
+            System.out.println("nextTs is " + nextTs.toString());
+
+            while (true) {
+                if(nextTs == null){
+                    System.out.println("cannot find nextTs from lsnTsMap. Exit with error");
+                    System.exit(1);
+                }
+                if (increTs) {
+                    // bumps up the current Timestamp and reset lsnTsMap
+                    Long prevTs = currTs;
+                    currTs = nextTs;
+//                    System.out.printf("update timestamp from %d to %d\n", prevTs, currTs);
+                    lsnTsMap.clear();
+                    nextTs = fillMap(conn, lsnTsMap);
+                }
+
+                increTs = true;
+
+                Table regionLSNTable = conn.getTable(regionLSNTableName);
+                Get getRegionLSN = new Get(regionLSNRowName);
+                Result regionLSNRow = regionLSNTable.get(getRegionLSN);
+                CellScanner regionLSNScanner = regionLSNRow.cellScanner();
+                int regionCount = 0;
+                while (regionLSNScanner.advance()) {
+                    Cell cell = regionLSNScanner.current();
+                    String region = Bytes.toString(cell.getQualifier());
+                    Long seqNum = Bytes.toLong(cell.getValue());
+                    if (!lsnTsMap.containsKey(region)) {
+                        // this case should not happen, it means that
+                        // a region's LSN has been written but the actual data
+                        // has not been replicated yet
+                        System.out.println("lsnTsMap does not contain a region");
                         increTs = false;
                         break;
+                    } else {
+                        Long targetSeqNum = lsnTsMap.get(region);
+                        System.out.println("target SeqNum " + targetSeqNum + " slave SeqNum: " + seqNum.toString());
+                        if (targetSeqNum > seqNum) {
+                            increTs = false;
+                            break;
+                        }
+                        regionCount++;
                     }
-                    regionCount++;
                 }
-            }
 
-            // currently does not check whether the number of regions match or not
-            // since not all the tables are currently being replicated
+                // currently does not check whether the number of regions match or not
+                // since not all the tables are currently being replicated
 //            if(regionCount < lsnTsMap.size()){
 //                increTs = false;
 //            }
-            regionLSNTable.close();
+                regionLSNTable.close();
+                System.out.println(String.format("after iteration nextTs is %d, currTs is %d", nextTs, currTs));
+            }
+        }
+        catch(Exception e){
+            System.out.println("Exit due to experiencing Exception" + e.toString());
+        }
+        finally{
+            if(conn != null){
+                conn.close();
+            }
         }
     }
 
@@ -114,13 +155,14 @@ public class TimestampIncre {
         while (scanner.advance()){
             // iterate through all the columns in the row
             Cell cell = scanner.current();
-            byte[] colName = cell.getQualifierArray();
+            byte[] colName = cell.getQualifier();
+            System.out.println(Bytes.toString(colName));
             if(Arrays.equals(colName, tsCol)){
-                nextTs = Bytes.toLong(cell.getValueArray());
+                nextTs = Bytes.toLong(cell.getValue());
             }
             else{
                 String region = Bytes.toString(colName);
-                Long seqNum = Bytes.toLong(cell.getValueArray());
+                Long seqNum = Bytes.toLong(cell.getValue());
                 map.put(region, seqNum);
             }
         }

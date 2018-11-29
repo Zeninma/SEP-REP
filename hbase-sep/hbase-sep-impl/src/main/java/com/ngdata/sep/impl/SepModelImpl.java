@@ -46,6 +46,7 @@ public class SepModelImpl implements SepModel {
     private Log log = LogFactory.getLog(getClass());
 
     public SepModelImpl(ZooKeeperItf zk, Configuration hbaseConf) {
+        System.out.println("creating new SepModelImpl");
         
         this.zkQuorumString = hbaseConf.get("hbase.zookeeper.quorum");
         if (zkQuorumString == null) {
@@ -74,41 +75,33 @@ public class SepModelImpl implements SepModel {
 
     @Override
     public boolean addSubscriptionSilent(String name) throws InterruptedException, KeeperException, IOException {
-        ReplicationAdmin replicationAdmin = new ReplicationAdmin(hbaseConf);
-        try {
-            String internalName = toInternalSubscriptionName(name);
-            if (replicationAdmin.listPeerConfigs().containsKey(internalName)) {
-                return false;
-            }
+        String internalName = toInternalSubscriptionName(name);
+        String basePath = baseZkPath + "/" + internalName;
+        UUID uuid = UUID.nameUUIDFromBytes(Bytes.toBytes(internalName)); // always gives the same uuid for the same name
+        ZkUtil.createPath(zk, basePath + "/hbaseid", Bytes.toBytes(uuid.toString()));
+        ZkUtil.createPath(zk, basePath + "/rs");
 
-            String basePath = baseZkPath + "/" + internalName;
-            UUID uuid = UUID.nameUUIDFromBytes(Bytes.toBytes(internalName)); // always gives the same uuid for the same name
-            ZkUtil.createPath(zk, basePath + "/hbaseid", Bytes.toBytes(uuid.toString()));
-            ZkUtil.createPath(zk, basePath + "/rs");
+//            try {
+//                replicationAdmin.addPeer(internalName, zkQuorumString + ":" + zkClientPort + ":" + basePath);
+//                System.out.printf("internalName %s clusterKey %s",
+//                        internalName, zkQuorumString + ":" + zkClientPort + ":" + basePath);
+//            } catch (IllegalArgumentException e) {
+//                if (e.getMessage().equals("Cannot add existing peer")) {
+//                    return false;
+//                }
+//                throw e;
+//            } catch (Exception e) {
+//                // HBase 0.95+ throws at least one extra exception: ReplicationException which we convert into IOException
+//                if (e instanceof InterruptedException) {
+//                    throw (InterruptedException)e;
+//                } else if (e instanceof KeeperException) {
+//                    throw (KeeperException)e;
+//                } else {
+//                    throw new IOException(e);
+//                }
+//            }
 
-
-            try {
-                replicationAdmin.addPeer(internalName, zkQuorumString + ":" + zkClientPort + ":" + basePath);
-            } catch (IllegalArgumentException e) {
-                if (e.getMessage().equals("Cannot add existing peer")) {
-                    return false;
-                }
-                throw e;
-            } catch (Exception e) {
-                // HBase 0.95+ throws at least one extra exception: ReplicationException which we convert into IOException
-                if (e instanceof InterruptedException) {
-                    throw (InterruptedException)e;
-                } else if (e instanceof KeeperException) {
-                    throw (KeeperException)e;
-                } else {
-                    throw new IOException(e);
-                }
-            }
-
-            return true;
-        } finally {
-            Closer.close(replicationAdmin);
-        }
+        return true;
     }
 
     @Override

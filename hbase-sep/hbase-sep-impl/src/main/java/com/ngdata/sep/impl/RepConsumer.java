@@ -54,8 +54,7 @@ import org.apache.zookeeper.CreateMode;
 import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.ZooDefs;
 
-import java.io.IOException;
-import java.io.InterruptedIOException;
+import java.io.*;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.util.*;
@@ -104,6 +103,8 @@ public class RepConsumer extends BaseHRegionServer {
     public RepConsumer(TableName newRegionLSNTableName, byte[] newRegionLSNCFName,
             byte[] newRegionLSNRowName, String subscriptionId, long subscriptionTimestamp,
                        String hostName, ZooKeeperItf zk, Configuration hbaseConf, boolean isTest) throws IOException{
+
+        System.out.println("Creating RepConsumer");
         this.subscriptionId = SepModelImpl.toInternalSubscriptionName(subscriptionId);
         this.subscriptionTimestamp = subscriptionTimestamp;
         this.zk = zk;
@@ -113,6 +114,7 @@ public class RepConsumer extends BaseHRegionServer {
         this.regionLSNCFName = newRegionLSNCFName;
         this.regionLSNRowName = newRegionLSNRowName;
         this.isTest = isTest;
+
         // Binding the SEP Consumer to a socket
         InetSocketAddress initialIsa = new InetSocketAddress(hostName, 0);
         if (initialIsa.getAddress() == null) {
@@ -154,7 +156,6 @@ public class RepConsumer extends BaseHRegionServer {
      * Publish the service on Zookeeper for the Master replication cluster to use
      */
     public void start() throws IOException, InterruptedException, KeeperException {
-
         rpcServer.start();
 
         // Publish our existence in ZooKeeper under the name
@@ -206,6 +207,7 @@ public class RepConsumer extends BaseHRegionServer {
     @Override
     public AdminProtos.ReplicateWALEntryResponse replicateWALEntry(final RpcController controller,
                                                                    final AdminProtos.ReplicateWALEntryRequest request) throws ServiceException {
+        System.out.println("replicateWALEntry is invoked");
         List<AdminProtos.WALEntry> entries = request.getEntryList();
         CellScanner cells = ((PayloadCarryingRpcController)controller).cellScanner();
 
@@ -346,7 +348,7 @@ public class RepConsumer extends BaseHRegionServer {
     /**
      * Do the changes and handle the pool
      * @param tableName table to insert into
-     * @param rows list of actions
+     * @param put a single put to update the regionLSN table
      * @throws IOException
      */
     protected void applyPut(TableName tableName, Put put) throws IOException {
