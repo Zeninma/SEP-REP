@@ -47,14 +47,18 @@ public class RepWALEditConsumer {
 
 
     public static void main(String[] args) throws Exception {
-        System.out.println("This is the second version");
+        if(args.length != 1){
+            System.out.println("Missing master address");
+            System.exit(0);
+        }
+        String masterAddr = args[0];
         // Create a configuratin and set replication to true
         Configuration conf = HBaseConfiguration.create();
         conf.setBoolean("hbase.replication", true);
 
         // get the hbase zookeeper quorum's ip and create the zoo keeper connection
-        String connectString = conf.get("hbase.zookeeper.quorum", "localhost");
-        ZooKeeperItf zk = ZkUtil.connect(connectString, 20000);
+        conf.set("hbase.zookeeper.quorum", masterAddr);
+        ZooKeeperItf zk = ZkUtil.connect(masterAddr, 20000);
 
         // Create SepModelImpl and set up the zk nodes
         SepModel sepModel = new SepModelImpl(zk, conf);

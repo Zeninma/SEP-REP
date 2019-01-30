@@ -104,7 +104,6 @@ public class RepConsumer extends BaseHRegionServer {
             byte[] newRegionLSNRowName, String subscriptionId, long subscriptionTimestamp,
                        String hostName, ZooKeeperItf zk, Configuration hbaseConf, boolean isTest) throws IOException{
 
-        System.out.println("Creating RepConsumer");
         this.subscriptionId = SepModelImpl.toInternalSubscriptionName(subscriptionId);
         this.subscriptionTimestamp = subscriptionTimestamp;
         this.zk = zk;
@@ -207,7 +206,6 @@ public class RepConsumer extends BaseHRegionServer {
     @Override
     public AdminProtos.ReplicateWALEntryResponse replicateWALEntry(final RpcController controller,
                                                                    final AdminProtos.ReplicateWALEntryRequest request) throws ServiceException {
-        System.out.println("replicateWALEntry is invoked");
         List<AdminProtos.WALEntry> entries = request.getEntryList();
         CellScanner cells = ((PayloadCarryingRpcController)controller).cellScanner();
 

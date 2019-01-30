@@ -16,6 +16,7 @@
 
 package com.ngdata.sep.demo;
 
+import org.apache.commons.lang.mutable.MutableBoolean;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellScanner;
@@ -49,7 +50,6 @@ public class TimestampIncre {
     // there is only one row in regionLSNTableName
     final private static byte[] regionLSNRowName = Bytes.toBytes("regionLSNRowName");
 
-
     public static void main(String[] args) throws Exception {
         Connection conn = null;
         try {
@@ -57,13 +57,13 @@ public class TimestampIncre {
             Configuration conf = HBaseConfiguration.create();
             conn = ConnectionFactory.createConnection(conf);
             Admin admin = conn.getAdmin();
-            // check if both table regionLSNTable and masterLSNTS exit
+            // check if both table regionLSNTable and masterLSNTS exist
             System.out.println("started TimestampIncre");
             while (!(admin.tableExists(masterLSNTS) && admin.tableExists(regionLSNTableName))) {
                 // sleep for 1 seconds and retry.
                 try {
-                    Thread.sleep(5000);
-                    System.out.println("waiting for table to be created");
+                    Thread.sleep(500);
+                    System.out.println("waiting for table to be created ...");
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                     throw new RuntimeException(e);
@@ -74,28 +74,30 @@ public class TimestampIncre {
             System.out.println("the two tables come online");
 
             Long currTs = null;
-            Long nextTs = null;
+            Long nextTs = 0l;
             Boolean increTs = false;
-            Map<String, Long> lsnTsMap = new HashMap<String, Long>();
-            nextTs = fillMap(conn, lsnTsMap);
-            System.out.println("nextTs is " + nextTs.toString());
+            Map<String, Long> masterLSNTSMap = new HashMap<String, Long>();
+            Map<String, Long> regionLSNMap = new HashMap<String, Long>();
+            boolean updated = false;
+            nextTs = fillMap(conn, masterLSNTSMap);
+            long startTime = System.nanoTime();
 
             while (true) {
-                if(nextTs == null){
-                    System.out.println("cannot find nextTs from lsnTsMap. Exit with error");
-                    System.exit(1);
-                }
-                if (increTs) {
+                if (updated && increTs) {
+                    long lastTime = startTime;
                     // bumps up the current Timestamp and reset lsnTsMap
                     Long prevTs = currTs;
                     currTs = nextTs;
-//                    System.out.printf("update timestamp from %d to %d\n", prevTs, currTs);
-                    lsnTsMap.clear();
-                    nextTs = fillMap(conn, lsnTsMap);
+                    nextTs = fillMap(conn, masterLSNTSMap);
+                    startTime = System.nanoTime();
+                    System.out.println(String.format("%d nanosecond after last update", startTime - lastTime));
                 }
 
                 increTs = true;
-
+                updated = false;
+                boolean printStupidLog = true;
+                // iterate through regionLSNTable and compare all the LSNs inside the table
+                // to check whehter it it eligible for a timestamp bump up.
                 Table regionLSNTable = conn.getTable(regionLSNTableName);
                 Get getRegionLSN = new Get(regionLSNRowName);
                 Result regionLSNRow = regionLSNTable.get(getRegionLSN);
@@ -105,16 +107,20 @@ public class TimestampIncre {
                     Cell cell = regionLSNScanner.current();
                     String region = Bytes.toString(cell.getQualifier());
                     Long seqNum = Bytes.toLong(cell.getValue());
-                    if (!lsnTsMap.containsKey(region)) {
+                    if(!regionLSNMap.containsKey(region) || regionLSNMap.get(region) < seqNum){
+                        updated = true;
+                    }
+                    regionLSNMap.put(region, seqNum);
+                    if (!masterLSNTSMap.containsKey(region)) {
                         // this case should not happen, it means that
                         // a region's LSN has been written but the actual data
                         // has not been replicated yet
-                        System.out.println("lsnTsMap does not contain a region");
-                        increTs = false;
-                        break;
+//                        System.out.println("missing region in LSN");
                     } else {
-                        Long targetSeqNum = lsnTsMap.get(region);
-                        System.out.println("target SeqNum " + targetSeqNum + " slave SeqNum: " + seqNum.toString());
+                        Long targetSeqNum = masterLSNTSMap.get(region);
+                        if(targetSeqNum == seqNum){
+                            System.out.println("region and master are equal");
+                        }
                         if (targetSeqNum > seqNum) {
                             increTs = false;
                             break;
@@ -129,11 +135,10 @@ public class TimestampIncre {
 //                increTs = false;
 //            }
                 regionLSNTable.close();
-                System.out.println(String.format("after iteration nextTs is %d, currTs is %d", nextTs, currTs));
             }
         }
         catch(Exception e){
-            System.out.println("Exit due to experiencing Exception" + e.toString());
+            System.out.println("Exit due to unexpected exception" + e.toString());
         }
         finally{
             if(conn != null){
@@ -156,7 +161,6 @@ public class TimestampIncre {
             // iterate through all the columns in the row
             Cell cell = scanner.current();
             byte[] colName = cell.getQualifier();
-            System.out.println(Bytes.toString(colName));
             if(Arrays.equals(colName, tsCol)){
                 nextTs = Bytes.toLong(cell.getValue());
             }
